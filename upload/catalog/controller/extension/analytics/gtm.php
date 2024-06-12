@@ -39,8 +39,19 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 	
 	private function format_product($product) {
 	
-		$price_unformatted = $this->clean_price($product['price']);
-		$special_unformatted = $this->clean_price($product['special']);
+		if (isset($product['initial_price'])) {
+			$price_unformatted = $this->clean_price($product['initial_price']);
+			$special_unformatted = $this->clean_price($product['price']);
+		} else if (isset($product['special'])) {
+			$price_unformatted = $this->clean_price($product['price']);
+			$special_unformatted = $this->clean_price($product['special']);
+		} else {
+			$price_unformatted = $this->clean_price($product['price']);
+			$special_unformatted = false;
+		}
+		
+		$discount = 0;
+		if ($special_unformatted) $discount = strval(round($price_unformatted - $special_unformatted, 2));
 		
 		if (!empty($product['categories'])) {
 			$category_names = $product['categories'];
@@ -58,13 +69,18 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 				}
 			}
 		}
+		
+		if (empty($product['manufacturer'])) {
+			$manufacturer_name = $this->db->query("SELECT m.name FROM " . DB_PREFIX . "product p LEFT JOIN " . DB_PREFIX . "manufacturer m ON (p.manufacturer_id = m.manufacturer_id) WHERE p.product_id = '" . $product['product_id'] . "'")->row['name'];
+			if ($manufacturer_name) $product['manufacturer'] = $manufacturer_name;
+		}
 	
 		$item = [
 			'item_id' => $product['product_id'],
 			'item_name' => $product['name'],
 			'affiliation' => null,
 			'coupon' => null,
-			'discount' => $special_unformatted ? $price_unformatted - $special_unformatted : 0,
+			'discount' => $discount,
 			'item_brand' => $product['manufacturer'],
 			'item_category' => $category_names[0] ?? null,
 			'item_category2' => $category_names[1] ?? null,
@@ -206,7 +222,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 							const select_item_event = {
 								"event": "select_item",
 								"ecommerce": {
-									"{$item_list_name}": "Category",
+									"$item_list_name": "{$item_list_name}",
 									"items": [
 										item
 									]
@@ -251,6 +267,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		}
 		
 		$item = $this->format_product($product_info);
+		$item['item_list_name'] = 'Cart';
 		$item['quantity'] = $quantity;
 		
 		$value = (float)$item['price'] * (int)$item['quantity'];
@@ -334,6 +351,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		];
 		
 		$item = $this->format_product($product);
+		$item['item_list_name'] = 'Product';
 		
 		$value = $item['price'];
 		
@@ -391,9 +409,12 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$value = 0;
 		
 		if (isset($this->session->data['gtm']['cart'])) {
-			foreach($this->session->data['gtm']['cart'] as $_cart_item) {
+			foreach($this->session->data['gtm']['cart'] as $index => $_cart_item) {
 				$item = $this->format_product($_cart_item);
+				$item['index'] = $index;
 				$item['quantity'] = $_cart_item['quantity'];
+				$item['item_list_id'] = 'category';
+				$item['item_list_name'] = 'Category';
 				$value += (float)$item['price'] * (int)$item['quantity'];
 				$items[] = $item;
 			}
@@ -430,9 +451,12 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$value = 0;
 		
 		if (isset($this->session->data['gtm']['cart'])) {
-			foreach($this->session->data['gtm']['cart'] as $_cart_item) {
+			foreach($this->session->data['gtm']['cart'] as $index =>  $_cart_item) {
 				$item = $this->format_product($_cart_item);
+				$item['index'] = $index;
 				$item['quantity'] = $_cart_item['quantity'];
+				$item['item_list_id'] = 'category';
+				$item['item_list_name'] = 'Category';
 				$value += (float)$item['price'] * (int)$item['quantity'];
 				$items[] = $item;
 			}
@@ -471,9 +495,12 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$value = 0;
 		
 		if (isset($this->session->data['gtm']['cart'])) {
-			foreach($this->session->data['gtm']['cart'] as $_cart_item) {
+			foreach($this->session->data['gtm']['cart'] as $index => $_cart_item) {
 				$item = $this->format_product($_cart_item);
+				$item['index'] = $index;
 				$item['quantity'] = $_cart_item['quantity'];
+				$item['item_list_id'] = 'category';
+				$item['item_list_name'] = 'Category';
 				$value += (float)$item['price'] * (int)$item['quantity'];
 				$items[] = $item;
 			}
@@ -487,7 +514,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 				'currency' => 'EUR',
 				'value' => $value,
 				'coupon' => null,
-				'shipping_tier' => $payment_method,
+				'payment_type' => $payment_method,
 				'items' => $items,
 			],
 		];
