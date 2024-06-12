@@ -477,8 +477,8 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		
 		$script = $this->event_script($event_data);
 		
-		$this->add_to_head($script, $output);
-		$output .= PHP_EOL.$script;
+		$script = $this->event_script($event_data);
+		$output = preg_replace('/(<\/div>)\s*$/', $script . '$1', $output);
 		
 		$this->session->data['gtm']['add_shipping_info'] = true;
 	}
@@ -520,9 +520,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		];
 		
 		$script = $this->event_script($event_data);
-		
-		$this->add_to_head($script, $output);
-		$output .= PHP_EOL.$script;
+		$output = preg_replace('/(<\/div>)\s*$/', $script . '$1', $output);
 		
 		$this->session->data['gtm']['add_payment_info'] = true;
 	}
