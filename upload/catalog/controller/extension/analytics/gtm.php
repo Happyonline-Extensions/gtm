@@ -16,10 +16,12 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 	}
 	
 	private function event_script($data) {
+		$json = json_encode($data, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
 		return '
 		<script>
+		if (window.location.href.includes(\'debug\')) console.log(JSON.stringify('.$json.'));
 		' . (isset($data['ecommerce']) ? 'dataLayer.push({ ecommerce: null });' : '') . '
-		dataLayer.push('.json_encode($data, JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT).');
+		dataLayer.push('.$json.');
 		</script>
 		';
 	}
@@ -207,7 +209,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 					"items": items
 				}
 			};
-			//console.log(JSON.stringify(view_item_list_event));
+			console.log(JSON.stringify(view_item_list_event));
 			dataLayer.push(view_item_list_event);
 			
 			//Google Tag Manager Select item
@@ -326,6 +328,43 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		
 		$event_data = [
 			'event' => 'remove_from_cart',
+			'ecommerce' => [
+				'currency' => 'EUR',
+				'value' => $value,
+				'items' => [
+					$item
+				],
+			],
+		];
+		
+		$this->session->data['gtm']['events_queue'][] = $event_data;
+	}
+	
+	public function add_to_wishlist(&$route, &$args, &$output) {
+		
+		$this->load->model('catalog/product');
+		
+		if (isset($this->request->post['product_id'])) {
+			$product_id = (int)$this->request->post['product_id'];
+		} else {
+			return;
+		}
+
+		$product_info = $this->model_catalog_product->getProduct($product_id);
+
+		if (!$product_info) return;
+		
+		if ($product_info['price']) $product_info['price'] = $this->tax->calculate($product_info['price'], $product_info['tax_class_id'], $this->config->get('config_tax'));
+		if ($product_info['special']) $product_info['special'] = $this->tax->calculate($product_info['special'], $product_info['tax_class_id'], $this->config->get('config_tax'));
+		
+		$item = $this->format_product($product_info);
+		$item['item_list_name'] = 'Wishlist';
+		
+		$value = (float)$item['price'] * (int)$item['quantity'];
+		$value = $this->clean_price($value);
+		
+		$event_data = [
+			'event' => 'add_to_wishlist',
 			'ecommerce' => [
 				'currency' => 'EUR',
 				'value' => $value,
