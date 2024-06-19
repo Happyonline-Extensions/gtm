@@ -386,7 +386,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			'price' => $args['price'],
 			'special' => $args['special'],
 			'manufacturer' => $args['manufacturer'],
-			'categories' => array_column($args['categories'], 'name'),
+			'categories' => array_column($args['categories'] ?? [], 'name'),
 		];
 		
 		$item = $this->format_product($product);
