@@ -114,6 +114,14 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$cart_products = $this->cart->getProducts();
 		$this->session->data['gtm']['cart'] = $cart_products;
 		
+		if (isset($this->request->get['route'])) {
+			$route_parts = explode('/', $this->request->get['route']);
+			if ($route_parts && count($route_parts) >= 2) {
+				$page = ucfirst(str_replace('_', ' ', $route_parts[1]));
+				if ($page != 'Not found') $this->session->data['gtm']['page'] = $page;
+			}
+		}
+		
 		$this->add_to_head($head, $output);
 		$this->add_to_body($body, $output);
 	}
@@ -182,13 +190,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			$items = [];
 			foreach($args['products'] as $index => $product) {
 			
-				$item_list_name = 'Category';
-				switch($this->route) {
-					case 'product/category':
-					default:
-						$item_list_name = 'Category';
-						break;
-				}
+				$item_list_name = $this->session->data['gtm']['page'];
 				
 				$item = $this->format_product($product, $index);
 				$item['index'] = $index;
@@ -209,7 +211,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 					"items": items
 				}
 			};
-			console.log(JSON.stringify(view_item_list_event));
+			if (window.location.href.includes(\'debug\')) console.log(JSON.stringify(view_item_list_event));
 			dataLayer.push(view_item_list_event);
 			
 			//Google Tag Manager Select item
@@ -230,7 +232,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 									]
 								}
 							};
-							console.log(JSON.stringify(select_item_event));
+							if (window.location.href.includes(\'debug\')) console.log(JSON.stringify(select_item_event));
 							dataLayer.push(select_item_event);
 						}
 					});
@@ -269,7 +271,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		}
 		
 		$item = $this->format_product($product_info);
-		$item['item_list_name'] = 'Cart';
+		$item['item_list_name'] = $this->session->data['gtm']['page'];
 		$item['quantity'] = $quantity;
 		
 		$value = (float)$item['price'] * (int)$item['quantity'];
@@ -572,16 +574,21 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			return;
 		}
 		
-		$items = [];
+		if (isset($args['products'])) {
 		
-		$value = 0;
-		
-		if (isset($this->session->data['gtm']['cart'])) {
-			foreach($this->session->data['gtm']['cart'] as $_cart_item) {
-				$item = $this->format_product($_cart_item);
-				$item['quantity'] = $_cart_item['quantity'];
+			$value = 0;
+			$items = [];
+			foreach($args['products'] as $index => $product) {
+			
+				$item_list_name = $this->session->data['gtm']['page'];
+				
+				$item = $this->format_product($product, $index);
+				$item['quantity'] = $product['quantity'];
+				$value += (float)$item['price'] * (int)$item['quantity'];
 				$items[] = $item;
 			}
+		} else {
+			return;
 		}
 		
 		$this->load->model('checkout/order');
@@ -605,7 +612,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 				'shipping' => $shipping,
 				'currency' => 'EUR',
 				'coupon' => null,
-				'items' => [$item],
+				'items' => $items,
 			],
 		];
 		
