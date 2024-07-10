@@ -111,6 +111,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		
 		$body = $this->body();
 		
+		if (isset($this->session->data['gtm']['cart'])) $this->session->data['gtm']['old_cart'] = $this->session->data['gtm']['cart'];
 		$cart_products = $this->cart->getProducts();
 		$this->session->data['gtm']['cart'] = $cart_products;
 		
@@ -211,7 +212,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 					"items": items
 				}
 			};
-			if (window.location.href.includes(\'debug\')) console.log(JSON.stringify(view_item_list_event));
+			if (window.location.href.includes('debug')) console.log(JSON.stringify(view_item_list_event));
 			dataLayer.push(view_item_list_event);
 			
 			//Google Tag Manager Select item
@@ -226,13 +227,13 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 							const select_item_event = {
 								"event": "select_item",
 								"ecommerce": {
-									"$item_list_name": "{$item_list_name}",
+									"item_list_name": "{$item_list_name}",
 									"items": [
 										item
 									]
 								}
 							};
-							if (window.location.href.includes(\'debug\')) console.log(JSON.stringify(select_item_event));
+							if (window.location.href.includes('debug')) console.log(JSON.stringify(select_item_event));
 							dataLayer.push(select_item_event);
 						}
 					});
@@ -340,6 +341,82 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		];
 		
 		$this->session->data['gtm']['events_queue'][] = $event_data;
+	}
+	
+	public function edit_cart(&$route, &$args, &$output) {
+		
+		$this->load->model('catalog/product');
+		
+		$cart_item = null;
+		$operation = null;
+		$quantity = null;
+		if (isset($this->session->data['gtm']['cart']) && isset($this->session->data['gtm']['old_cart'])) {
+		
+			$new_cart = $this->session->data['gtm']['cart'];
+			$old_cart = $this->session->data['gtm']['old_cart'];
+			
+			foreach($old_cart as $old_cart_item) {
+			
+				$found = false;
+				foreach($new_cart as $new_cart_item) {
+					if ($old_cart_item['cart_id'] == $new_cart_item['cart_id']) {
+						$found = true;
+						
+						$quantity_diff = $new_cart_item['quantity'] - $old_cart_item['quantity'];
+						
+						if ($quantity_diff > 0) {
+							$cart_item = $old_cart_item;
+							$operation = 'add_to_cart';
+							$quantity = abs($quantity_diff);
+							break 2;
+						} else if ($quantity_diff < 0) {
+							$cart_item = $old_cart_item;
+							$operation = 'remove_from_cart';
+							$quantity = abs($quantity_diff);
+							break 2;
+						}
+						
+						
+					}
+				}
+				if (!$found) {
+					$cart_item = $old_cart_item;
+					$operation = 'remove_from_cart';
+					$quantity = $old_cart_item['quantity'];
+					break;
+				}
+			}
+		}
+		
+		if (!isset($cart_item) || !isset($operation) || !isset($quantity)) return;
+		
+		$product_info = $this->model_catalog_product->getProduct($cart_item['product_id']);
+
+		if (!$product_info) return;
+		
+		if ($product_info['price']) $product_info['price'] = $this->tax->calculate($product_info['price'], $product_info['tax_class_id'], $this->config->get('config_tax'));
+		if ($product_info['special']) $product_info['special'] = $this->tax->calculate($product_info['special'], $product_info['tax_class_id'], $this->config->get('config_tax'));
+		
+		$item = $this->format_product($product_info);
+		$item['quantity'] = $quantity;
+		
+		$value = (float)$item['price'] * (int)$item['quantity'];
+		$value = $this->clean_price($value);
+		
+		$event_data = [
+			'event' => $operation,
+			'ecommerce' => [
+				'currency' => 'EUR',
+				'value' => $value,
+				'items' => [
+					$item
+				],
+			],
+		];
+		
+		$script = $this->event_script($event_data);
+		
+		$this->add_to_head($script, $output);
 	}
 	
 	public function add_to_wishlist(&$route, &$args, &$output) {
