@@ -73,7 +73,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		}
 		
 		if (empty($product['manufacturer'])) {
-			$manufacturer_name = $this->db->query("SELECT m.name FROM " . DB_PREFIX . "product p LEFT JOIN " . DB_PREFIX . "manufacturer m ON (p.manufacturer_id = m.manufacturer_id) WHERE p.product_id = '" . $product['product_id'] . "'")->row['name'];
+			$manufacturer_name = $this->db->query("SELECT md.name FROM " . DB_PREFIX . "product p LEFT JOIN " . DB_PREFIX . "manufacturer_description md ON (p.manufacturer_id = md.manufacturer_id) WHERE p.product_id = '" . $product['product_id'] . "'")->row['name'];
 			if ($manufacturer_name) $product['manufacturer'] = $manufacturer_name;
 		}
 	
@@ -100,8 +100,9 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 	
 		$head = $this->head();
 		
-		$head .= $this->user_data();
-		
+		// $head .= $this->user_data();
+		$head .= $this->user_data_alt();
+
 		if (!empty($this->session->data['gtm']['events_queue'])) {
 			foreach($this->session->data['gtm']['events_queue'] as $event_data) {
 				$head .= $this->event_script($event_data);
@@ -153,14 +154,68 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		<!-- Google Tag Manager (noscript) -->
 		<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=$gtm_id"
 		height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+		<script>
+		$(document).ajaxComplete(function(event, xhr, settings) {
+			if (
+				settings.url.includes('index.php?route=checkout/cart/add') || 
+				settings.url.includes('index.php?route=checkout/cart/edit') ||
+				settings.url.includes('index.php?route=checkout/cart/edit_alt') || 
+				settings.url.includes('index.php?route=checkout/cart/remove') || 
+				settings.url.includes('index.php?route=account/wishlist/add') 
+			) {
+				$.getJSON('/?route=extension/analytics/gtm/events_queue', function(data) {
+					data.forEach(function(event) {
+						if (window.location.href.includes('debug')) console.log(JSON.stringify(event));
+						if (event.ecommerce != undefined) dataLayer.push({ ecommerce: null });
+						dataLayer.push(event);
+					});
+				}).fail(function(jqXHR, textStatus, errorThrown) {
+					console.error(textStatus, errorThrown);
+				});
+			}
+		});
+		</script>
 		<!-- End Google Tag Manager (noscript) -->
 		EOT;
 	}
 	
-	public function user_data() {
+	public function events_queue() {
+		$events_queue = $this->session->data['gtm']['events_queue'] ?? [];
+		$this->response->addHeader('Content-Type: application/json');
+		$this->response->setOutput(json_encode($events_queue));
+	}
+	
+	// public function user_data() {
 		
-		$user_data = [];
+	// 	$user_data = [];
+	// 	if ($this->customer->isLogged()) {
+	// 		$this->load->model('account/customer');
+	// 		$customer_info = $this->model_account_customer->getCustomer($this->customer->getId());
+	// 		$user_data['userId'] = $this->customer->getId();
+	// 		$user_data['email'] = $customer_info['email'];
+	// 		$user_data['phone_number'] = $customer_info['telephone'];
+	// 		$user_data['address']['first_name'] = $customer_info['firstname'];
+	// 		$user_data['address']['last_name'] = $customer_info['lastname'];
+	// 	} elseif (isset($this->session->data['guest'])) {
+	// 		$user_data['userId'] = null;
+	// 		$user_data['email'] = $this->session->data['guest']['email'];
+	// 		$user_data['phone_number'] = $this->session->data['guest']['telephone'];
+	// 		$user_data['address']['first_name'] = $this->session->data['guest']['firstname'];
+	// 		$user_data['address']['last_name'] = $this->session->data['guest']['lastname'];
+	// 	}
+	// 	$user_data['address']['street'] = $this->session->data['payment_address']['address_1'] ?? null;
+	// 	$user_data['address']['city'] = $this->session->data['payment_address']['city'] ?? null;
+	// 	$user_data['address']['region'] = $this->session->data['payment_address']['zone'] ?? null;
+	// 	$user_data['address']['postal_code'] = $this->session->data['payment_address']['postcode'] ?? null;
+	// 	$user_data['address']['country'] = $this->session->data['payment_address']['iso_code_2'] ?? null;
+		
+	// 	return $this->event_script($user_data);
+	// }
+
+	public function user_data_alt() {
+		// if(!isset($this->session->data['gtm_order_id'])) {
 		if ($this->customer->isLogged()) {
+			$user_data = [];
 			$this->load->model('account/customer');
 			$customer_info = $this->model_account_customer->getCustomer($this->customer->getId());
 			$user_data['userId'] = $this->customer->getId();
@@ -168,20 +223,78 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			$user_data['phone_number'] = $customer_info['telephone'];
 			$user_data['address']['first_name'] = $customer_info['firstname'];
 			$user_data['address']['last_name'] = $customer_info['lastname'];
-		} elseif (isset($this->session->data['guest'])) {
-			$user_data['userId'] = null;
-			$user_data['email'] = $this->session->data['guest']['email'];
-			$user_data['phone_number'] = $this->session->data['guest']['telephone'];
-			$user_data['address']['first_name'] = $this->session->data['guest']['firstname'];
-			$user_data['address']['last_name'] = $this->session->data['guest']['lastname'];
+
+			$event_data = [
+				'event' => 'user_data',
+				'user_data' => [
+					'userId' 			=> $user_data['userId'],
+					'email' 			=> $user_data['email'],
+					'phone_number' 		=> $user_data['phone_number'],
+					'address' => [
+						'first_name' 	=> $user_data['address']['first_name'],
+						'last_name' 	=> $user_data['address']['last_name']
+					]
+				]
+			];
+			
+			return $this->event_script($event_data);
 		}
-		$user_data['address']['street'] = $this->session->data['payment_address']['address_1'] ?? null;
-		$user_data['address']['city'] = $this->session->data['payment_address']['city'] ?? null;
-		$user_data['address']['region'] = $this->session->data['payment_address']['zone'] ?? null;
-		$user_data['address']['postal_code'] = $this->session->data['payment_address']['postcode'] ?? null;
-		$user_data['address']['country'] = $this->session->data['payment_address']['iso_code_2'] ?? null;
-		
-		return $this->event_script($user_data);
+	}
+
+	public function user_data_purchase(&$route, &$args, &$output) {
+		if(isset($this->session->data['gtm_order_id'])) {
+			$user_data = [];
+			if ($this->customer->isLogged()) {
+				$this->load->model('account/customer');
+				$customer_info = $this->model_account_customer->getCustomer($this->customer->getId());
+				$user_data['userId'] = $this->customer->getId();
+				$user_data['email'] = $customer_info['email'];
+				$user_data['phone_number'] = $customer_info['telephone'];
+				$user_data['address']['first_name'] = $customer_info['firstname'];
+				$user_data['address']['last_name'] = $customer_info['lastname'];
+			} elseif (isset($this->session->data['gtm_guest'])) {
+				$user_data['userId'] = null;
+				$user_data['email'] = isset($this->session->data['gtm_guest']['email']) ? $this->session->data['gtm_guest']['email'] : null;
+				$user_data['phone_number'] = isset($this->session->data['gtm_guest']['telephone']) ? $this->session->data['gtm_guest']['telephone'] :  null;
+				$user_data['address']['first_name'] = isset($this->session->data['gtm_guest']['firstname']) ? $this->session->data['gtm_guest']['firstname'] : null;
+				$user_data['address']['last_name'] = isset($this->session->data['gtm_guest']['lastname']) ? $this->session->data['gtm_guest']['lastname'] :  null;
+			}
+
+			if((isset($this->session->data['gtm_order_id'])) && ((int)$this->session->data['gtm_order_id'] > 0)) {
+				$this->load->model('checkout/order');
+				$order_info = $this->model_checkout_order->getOrder($this->session->data['gtm_order_id']);
+
+				$user_data['address']['street'] = (isset($order_info['payment_address_1']) ? $order_info['payment_address_1'] : (isset($this->session->data['gtm_guest']['address_1']) ?? null));
+				$user_data['address']['city'] = (isset($order_info['payment_city']) ? $order_info['payment_city'] : (isset($this->session->data['gtm_guest']['city']) ?? null));
+				$user_data['address']['region'] = (isset($order_info['payment_zone']) ? $order_info['payment_zone'] : (isset($this->session->data['gtm_guest']['zone']) ?? null));
+				$user_data['address']['postal_code'] = (isset($order_info['payment_postcode']) ? $order_info['payment_postcode'] : (isset($this->session->data['gtm_guest']['postcode']) ?? null));
+				$user_data['address']['country'] = (isset($order_info['payment_country']) ? $order_info['payment_country'] : (isset($this->session->data['gtm_guest']['iso_code_2']) ?? null));
+			}
+
+			$event_data = [
+				'event' => 'user_data',
+				'user_data' => [
+					'userId' 			=> $user_data['userId'],
+					'email' 			=> $user_data['email'],
+					'phone_number' 		=> $user_data['phone_number'],
+					'address' => [
+						'first_name' 	=> $user_data['address']['first_name'],
+						'last_name' 	=> $user_data['address']['last_name'],
+						'street' 		=> $user_data['address']['street'],
+						'city' 			=> $user_data['address']['city'],
+						'region' 		=> $user_data['address']['region'],
+						'postal_code' 	=> $user_data['address']['postal_code'],
+						'country'		=> $user_data['address']['country']
+					]
+				]
+			];
+
+			$script = $this->event_script($event_data);
+			
+			$this->add_to_head($script, $output);
+
+			// unset($this->session->data['gtm_order_id']);
+		}
 	}
 	
 	public function view_item_list(&$route, &$args, &$output) {
@@ -217,9 +330,9 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			
 			//Google Tag Manager Select item
 			$(document).ready(function() {
-				$('body').on('click', '[data-product-id] a', function(e) {
+				$('body').on('click', '[data-id] a', function(e) {
 					e.preventDefault();
-					const productId = $(this).closest('[data-product-id]').data('product-id');
+					const productId = $(this).closest('[data-id]').data('id');
 					const redirect = $(this).attr('href');
 					items.forEach(function(item) {
 						if (item.item_id == productId) {
@@ -494,9 +607,11 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$value = 0;
 		
 		if (isset($this->session->data['gtm']['cart'])) {
-			foreach($this->session->data['gtm']['cart'] as $_cart_item) {
+			foreach($this->session->data['gtm']['cart'] as $index => $_cart_item) {
 				$item = $this->format_product($_cart_item);
 				$item['quantity'] = $_cart_item['quantity'];
+				$item['index'] = $index;
+				$item['item_list_name'] = 'Category';
 				$value += (float)$item['price'] * (int)$item['quantity'];
 				$items[] = $item;
 			}
@@ -557,7 +672,7 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		$this->session->data['gtm']['begin_checkout'] = true;
 	}
 	
-	public function add_shipping_info(&$route, &$args, &$output) {
+	public function add_shipping_info_backup(&$route, &$args, &$output) {
 	
 		if (isset($this->session->data['gtm']['add_shipping_info'])) return;
 		if (!isset($this->session->data['shipping_method']['title'])) return;
@@ -600,8 +715,57 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		
 		$this->session->data['gtm']['add_shipping_info'] = true;
 	}
+
+	public function add_shipping_info(&$route, &$args, &$output) {
+		if((isset($this->session->data['gtm_order_id'])) && ((int)$this->session->data['gtm_order_id'] > 0)) {
+			$this->load->model('checkout/order');
+			$order_info = $this->model_checkout_order->getOrder($this->session->data['gtm_order_id']);
+
+			if(!empty($order_info['shipping_method'])) {
+				$shipping_method = $order_info['shipping_method'];
+		
+				$items = [];
+				
+				$value = 0;
+
+				$products = $this->model_checkout_order->getOrderProducts($this->session->data['gtm_order_id']);
+				
+				if (isset($products)) {
+					foreach($products as $index =>  $_cart_item) {
+						$item = $this->format_product($_cart_item);
+						$item['index'] = $index;
+						$item['quantity'] = $_cart_item['quantity'];
+						$item['item_list_id'] = 'category';
+						$item['item_list_name'] = 'Category';
+						$value += (float)$item['price'] * (int)$item['quantity'];
+						$items[] = $item;
+					}
+				}
+				
+				$value = $this->clean_price($value);
+				
+				$event_data = [
+					'event' => 'add_shipping_info',
+					'ecommerce' => [
+						'currency' => 'EUR',
+						'value' => $value,
+						'coupon' => null,
+						'shipping_tier' => $shipping_method,
+						'items' => $items,
+					],
+				];
+
+				$script = $this->event_script($event_data);
+				$output = preg_replace('/(<\/div>)\s*$/', $script . '$1', $output);
+
+				$this->add_to_head($script, $output);
+				
+				// $this->session->data['gtm']['add_shipping_info'] = true;
+			}
+		}
+	}
 	
-	public function add_payment_info(&$route, &$args, &$output) {
+	public function add_payment_info_backup(&$route, &$args, &$output) {
 	
 		if (isset($this->session->data['gtm']['add_payment_info'])) return;
 		if (!isset($this->session->data['payment_method']['title'])) return;
@@ -642,6 +806,53 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 		
 		$this->session->data['gtm']['add_payment_info'] = true;
 	}
+
+	public function add_payment_info(&$route, &$args, &$output) {
+		if((isset($this->session->data['gtm_order_id'])) && ((int)$this->session->data['gtm_order_id'] > 0)) {
+			$this->load->model('checkout/order');
+			$order_info = $this->model_checkout_order->getOrder($this->session->data['gtm_order_id']);
+
+			if(!empty($order_info['payment_method'])) {
+				$payment_method = $order_info['payment_method'];
+
+				$items = [];
+		
+				$value = 0;
+				
+				$products = $this->model_checkout_order->getOrderProducts($this->session->data['gtm_order_id']);
+				
+				if (isset($products)) {
+					foreach($products as $index =>  $_cart_item) {
+						$item = $this->format_product($_cart_item);
+						$item['index'] = $index;
+						$item['quantity'] = $_cart_item['quantity'];
+						$item['item_list_id'] = 'category';
+						$item['item_list_name'] = 'Category';
+						$value += (float)$item['price'] * (int)$item['quantity'];
+						$items[] = $item;
+					}
+				}
+				
+				$value = $this->clean_price($value);
+				
+				$event_data = [
+					'event' => 'add_payment_info',
+					'ecommerce' => [
+						'currency' => 'EUR',
+						'value' => $value,
+						'coupon' => null,
+						'payment_type' => $payment_method,
+						'items' => $items,
+					],
+				];
+
+				$script = $this->event_script($event_data);
+				$output = preg_replace('/(<\/div>)\s*$/', $script . '$1', $output);
+
+				$this->add_to_head($script, $output);
+			}
+		}
+	}
 	
 	public function purchase(&$route, &$args, &$output) {
 		
@@ -656,9 +867,8 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 			$value = 0;
 			$items = [];
 			foreach($args['products'] as $index => $product) {
-			
 				$item_list_name = $this->session->data['gtm']['page'];
-				
+
 				$item = $this->format_product($product, $index);
 				$item['quantity'] = $product['quantity'];
 				$value += (float)$item['price'] * (int)$item['quantity'];
