@@ -180,7 +180,11 @@ class ControllerExtensionAnalyticsGtm extends Controller {
 	}
 	
 	public function events_queue() {
-		$events_queue = $this->session->data['gtm']['events_queue'] ?? [];
+		$events_queue = [];
+		if (!empty($this->session->data['gtm']['events_queue'])) {
+			$events_queue = $this->session->data['gtm']['events_queue'];
+			unset($this->session->data['gtm']['events_queue']);
+		}
 		$this->response->addHeader('Content-Type: application/json');
 		$this->response->setOutput(json_encode($events_queue));
 	}
